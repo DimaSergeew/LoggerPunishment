@@ -1,0 +1,34 @@
+name: LoggerPunishment
+version: '1.0'
+main: org.bedepay.loggerpunishment.LoggerPunishment
+api-version: '1.20'
+description: 'Плагин логирования игровых наказаний в Discord'
+author: bedepay
+website: 'https://3b3t.fun'
+
+depend: [LiteBans, CMI]
+softdepend: []
+
+commands:
+  punishmentlogs:
+    description: 'Управление плагином логирования наказаний'
+    usage: '/punishmentlogs <reload|test|stats|queue|sync> [аргументы]'
+    permission: punishmentlogs.admin
+    aliases: [plog, plogs]
+
+permissions:
+  punishmentlogs.admin:
+    description: 'Полный доступ к плагину логирования наказаний'
+    default: op
+  punishmentlogs.reload:
+    description: 'Разрешение на перезагрузку конфигурации'
+    default: op
+  punishmentlogs.test:
+    description: 'Разрешение на использование тестовых команд'
+    default: op
+  punishmentlogs.stats:
+    description: 'Разрешение на просмотр статистики плагина'
+    default: op
+  punishmentlogs.sync:
+    description: 'Разрешение на ручную синхронизацию статистики'
+    default: op

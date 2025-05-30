@@ -1,0 +1,150 @@
+plugins {
+    id 'java'
+    id("xyz.jpenilla.run-paper") version "2.3.1"
+    id 'nu.studer.jooq' version '8.2'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group = 'org.bedepay'
+version = '1.0'
+
+repositories {
+    mavenCentral()
+    maven {
+        name = "papermc-repo"
+        url = "https://repo.papermc.io/repository/maven-public/"
+    }
+    maven {
+        name = "sonatype"
+        url = "https://oss.sonatype.org/content/groups/public/"
+    }
+    maven {
+        name = "litebans-repo"
+        url = "https://repo.litebans.org/"
+    }
+    maven {
+        name = "zrips-repo"
+        url = "https://repo.zrips.net/repository/maven-public/"
+    }
+    maven {
+        name = "jitpack"
+        url = "https://jitpack.io"
+    }
+    flatDir {
+        dirs 'libs'
+    }
+}
+
+dependencies {
+    compileOnly("io.papermc.paper:paper-api:1.20.4-R0.1-SNAPSHOT")
+    
+    implementation("net.dv8tion:JDA:5.0.0-beta.18") {
+        exclude module: 'opus-java'
+    }
+    
+    implementation("org.jooq:jooq:3.18.7")
+    implementation("org.jooq:jooq-meta:3.18.7")
+    implementation("org.jooq:jooq-codegen:3.18.7")
+    
+    implementation("org.xerial:sqlite-jdbc:3.43.2.2")
+    implementation("mysql:mysql-connector-java:8.0.33")
+    
+    implementation("com.zaxxer:HikariCP:5.0.1")
+    
+    implementation("org.redisson:redisson:3.24.3")
+    
+    compileOnly name: 'CMIAPI-9.7.4.1', version: '9.7.4.1'
+    
+    implementation("org.yaml:snakeyaml:2.2")
+    implementation("com.google.code.gson:gson:2.10.1")
+    
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    
+    implementation("org.slf4j:slf4j-api:2.0.9")
+    implementation("ch.qos.logback:logback-classic:1.4.11")
+    compileOnly 'com.gitlab.ruany:LiteBansAPI:0.6.1'
+}
+
+jooq {
+    version = '3.18.7'
+    edition = nu.studer.gradle.jooq.JooqEdition.OSS
+    
+    configurations {
+        main {
+            generateSchemaSourceOnCompilation = false
+            generationTool {
+                logging = org.jooq.meta.jaxb.Logging.WARN
+                jdbc {
+                    driver = 'org.sqlite.JDBC'
+                    url = 'jdbc:sqlite:src/main/resources/database_schema.db'
+                }
+                generator {
+                    name = 'org.jooq.codegen.DefaultGenerator'
+                    database {
+                        name = 'org.jooq.meta.sqlite.SQLiteDatabase'
+                    }
+                    target {
+                        packageName = 'org.bedepay.loggerpunishment.database.generated'
+                        directory = 'src/main/java'
+                    }
+                }
+            }
+        }
+    }
+}
+
+tasks {
+    runServer {
+        minecraftVersion("1.20")
+    }
+    
+    shadowJar {
+        archiveBaseName.set('LoggerPunishment')
+        archiveClassifier.set('')
+        archiveVersion.set('')
+        
+        relocate 'net.dv8tion.jda', 'org.bedepay.loggerpunishment.libs.jda'
+        relocate 'org.redisson', 'org.bedepay.loggerpunishment.libs.redisson'
+        relocate 'org.jooq', 'org.bedepay.loggerpunishment.libs.jooq'
+        relocate 'com.zaxxer.hikari', 'org.bedepay.loggerpunishment.libs.hikari'
+        relocate 'okhttp3', 'org.bedepay.loggerpunishment.libs.okhttp'
+        relocate 'com.google.gson', 'org.bedepay.loggerpunishment.libs.gson'
+        
+        exclude 'META-INF/versions/'
+        exclude 'META-INF/maven/'
+        exclude 'META-INF/*.SF'
+        exclude 'META-INF/*.DSA'
+        exclude 'META-INF/*.RSA'
+    }
+    
+    build {
+        dependsOn shadowJar
+    }
+}
+
+def targetJavaVersion = 17
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    sourceCompatibility = javaVersion
+    targetCompatibility = javaVersion
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+
+    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+        options.release.set(targetJavaVersion)
+    }
+}
+
+processResources {
+    def props = [version: version]
+    inputs.properties props
+    filteringCharset 'UTF-8'
+    filesMatching('plugin.yml') {
+        expand props
+    }
+}
