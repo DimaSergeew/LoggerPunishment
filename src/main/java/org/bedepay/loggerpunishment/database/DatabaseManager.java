@@ -166,11 +166,14 @@ public class DatabaseManager {
             // Читаем SQL схему из ресурсов
             String schemaSQL = readSchemaFromResources();
             
+            // Для SQLite не используем транзакции при создании таблиц
             try (Connection connection = getConnection();
                  Statement statement = connection.createStatement()) {
                 
-                // Разделяем SQL на отдельные команды
-                String[] sqlCommands = schemaSQL.split(";");
+                // Разделяем SQL на отдельные команды, учитывая многострочные команды
+                List<String> sqlCommands = parseSQLCommands(schemaSQL);
+                
+                logger.info("Найдено " + sqlCommands.size() + " SQL команд для выполнения");
                 
                 for (String sql : sqlCommands) {
                     sql = sql.trim();
@@ -180,8 +183,9 @@ public class DatabaseManager {
                         } catch (SQLException e) {
                             // Игнорируем ошибки "уже существует" для SQLite
                             if (!e.getMessage().contains("already exists") && 
-                                !e.getMessage().contains("duplicate column")) {
-                                logger.warning("Ошибка при выполнении SQL: " + sql + " - " + e.getMessage());
+                                !e.getMessage().contains("duplicate column") &&
+                                !e.getMessage().contains("object name already exists")) {
+                                logger.warning("Ошибка при выполнении SQL: " + sql.substring(0, Math.min(sql.length(), 100)) + "... - " + e.getMessage());
                             }
                         }
                     }
@@ -211,6 +215,141 @@ public class DatabaseManager {
         }
         
         return content.toString();
+    }
+    
+    /**
+     * Парсинг SQL команд с учетом многострочных команд
+     */
+    private List<String> parseSQLCommands(String sql) {
+        List<String> commands = new ArrayList<>();
+        StringBuilder currentCommand = new StringBuilder();
+        boolean inTrigger = false;
+        boolean inCreateTable = false;
+        boolean inCreateIndex = false;
+        int parenthesesLevel = 0;
+        String currentConstruct = "";
+        
+        String[] lines = sql.split("\n");
+        
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+            
+            // Пропускаем комментарии и пустые строки
+            if (trimmedLine.isEmpty() || trimmedLine.startsWith("--")) {
+                continue;
+            }
+            
+            // Определяем начало различных конструкций
+            String upperLine = trimmedLine.toUpperCase();
+            
+            // Если уже внутри конструкции
+            if (inTrigger || inCreateTable || inCreateIndex) {
+                currentCommand.append(" ").append(trimmedLine);
+                
+                // Подсчитываем скобки для CREATE TABLE
+                if (inCreateTable) {
+                    for (char c : trimmedLine.toCharArray()) {
+                        if (c == '(') parenthesesLevel++;
+                        else if (c == ')') parenthesesLevel--;
+                    }
+                    
+                    // CREATE TABLE заканчивается когда скобки закрыты и есть ;
+                    if (parenthesesLevel == 0 && trimmedLine.endsWith(";")) {
+                        finishCommand(commands, currentCommand);
+                        inCreateTable = false;
+                        currentConstruct = "";
+                    }
+                } else if (inTrigger) {
+                    // TRIGGER заканчивается на END;
+                    if (upperLine.equals("END;") || upperLine.endsWith(" END;")) {
+                        finishCommand(commands, currentCommand);
+                        inTrigger = false;
+                        currentConstruct = "";
+                    }
+                } else if (inCreateIndex) {
+                    // INDEX - простая однострочная команда
+                    if (trimmedLine.endsWith(";")) {
+                        finishCommand(commands, currentCommand);
+                        inCreateIndex = false;
+                        currentConstruct = "";
+                    }
+                }
+                continue;
+            }
+            
+            // Завершаем предыдущую команду если начинается новая конструкция
+            if (currentCommand.length() > 0 && 
+                (upperLine.startsWith("CREATE TABLE") || 
+                 upperLine.startsWith("CREATE TRIGGER") || 
+                 upperLine.startsWith("CREATE INDEX"))) {
+                finishCommand(commands, currentCommand);
+            }
+            
+            // Обработка начала конструкций
+            if (upperLine.startsWith("CREATE TRIGGER")) {
+                inTrigger = true;
+                currentConstruct = "TRIGGER";
+                currentCommand.append(trimmedLine);
+            } else if (upperLine.startsWith("CREATE TABLE")) {
+                inCreateTable = true;
+                currentConstruct = "TABLE";
+                parenthesesLevel = 0;
+                currentCommand.append(trimmedLine);
+                
+                // Подсчитываем скобки в первой строке
+                for (char c : trimmedLine.toCharArray()) {
+                    if (c == '(') parenthesesLevel++;
+                    else if (c == ')') parenthesesLevel--;
+                }
+                
+                // Если команда завершена в одной строке
+                if (parenthesesLevel == 0 && trimmedLine.endsWith(";")) {
+                    finishCommand(commands, currentCommand);
+                    inCreateTable = false;
+                    currentConstruct = "";
+                }
+            } else if (upperLine.startsWith("CREATE INDEX") || upperLine.startsWith("CREATE UNIQUE INDEX")) {
+                inCreateIndex = true;
+                currentConstruct = "INDEX";
+                currentCommand.append(trimmedLine);
+                
+                // Если команда завершена в одной строке
+                if (trimmedLine.endsWith(";")) {
+                    finishCommand(commands, currentCommand);
+                    inCreateIndex = false;
+                    currentConstruct = "";
+                }
+            } else {
+                // Обычная команда
+                currentCommand.append(" ").append(trimmedLine);
+                
+                // Простые команды заканчиваются на ;
+                if (trimmedLine.endsWith(";")) {
+                    finishCommand(commands, currentCommand);
+                }
+            }
+        }
+        
+        // Добавляем последнюю команду если есть
+        if (currentCommand.length() > 0) {
+            finishCommand(commands, currentCommand);
+        }
+        
+        return commands;
+    }
+    
+    /**
+     * Завершить и добавить команду в список
+     */
+    private void finishCommand(List<String> commands, StringBuilder currentCommand) {
+        String command = currentCommand.toString().trim();
+        if (command.endsWith(";")) {
+            command = command.substring(0, command.length() - 1).trim();
+        }
+        if (!command.isEmpty()) {
+            commands.add(command);
+        }
+        currentCommand.setLength(0);
     }
     
     /**

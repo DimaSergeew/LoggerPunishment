@@ -7,9 +7,6 @@ import org.bedepay.loggerpunishment.model.UnbanType;
 import org.bedepay.loggerpunishment.service.PunishmentService;
 import org.bedepay.loggerpunishment.util.TimeFormatter;
 import org.bukkit.Bukkit;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
 
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -19,7 +16,7 @@ import java.util.logging.Logger;
 /**
  * Слушатель событий наказаний из LiteBans и CMI
  */
-public class PunishmentListener implements Listener {
+public class PunishmentListener {
     
     private final LoggerPunishment plugin;
     private final PunishmentService punishmentService;
@@ -34,6 +31,9 @@ public class PunishmentListener implements Listener {
         
         // Регистрация слушателей LiteBans
         registerLiteBansListeners();
+        
+        // Регистрация слушателей CMI
+        registerCMIListeners();
     }
     
     /**
@@ -316,24 +316,54 @@ public class PunishmentListener implements Listener {
     // ==================== CMI СОБЫТИЯ ====================
     
     /**
-     * Обработка события заключения в тюрьму CMI
+     * Регистрация слушателей событий CMI
      */
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onCMIJail(org.bukkit.event.Event event) {
+    private void registerCMIListeners() {
         try {
-            if (!configManager.getIntegrationSettings().trackJails) {
-                return;
+            // Проверяем наличие CMI API
+            Class.forName("com.Zrips.CMI.events.CMIPlayerJailEvent");
+            
+            ConfigManager.IntegrationSettings integration = configManager.getIntegrationSettings();
+            
+            if (integration.trackJails) {
+                // Создаем слушатель для конкретных CMI событий
+                CMIEventListener listener = new CMIEventListener();
+                plugin.getServer().getPluginManager().registerEvents(listener, plugin);
+                logger.info("CMI слушатели зарегистрированы");
             }
             
-            // Используем рефлексию для работы с CMI событиями
-            if (event.getClass().getSimpleName().equals("PlayerJailEvent")) {
-                handleCMIJailEvent(event);
-            } else if (event.getClass().getSimpleName().equals("PlayerUnJailEvent")) {
-                handleCMIUnjailEvent(event);
-            }
-            
+        } catch (ClassNotFoundException e) {
+            logger.warning("CMI API не найден, события CMI не будут обрабатываться");
         } catch (Exception e) {
-            logger.log(Level.WARNING, "Ошибка при обработке CMI события: " + e.getMessage(), e);
+            logger.log(Level.WARNING, "Ошибка при регистрации CMI слушателей: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Внутренний класс для обработки CMI событий
+     */
+    private class CMIEventListener implements org.bukkit.event.Listener {
+        
+        // Используем рефлексию для обработки событий CMI без прямой зависимости
+        @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.MONITOR)
+        public void onPlayerJail(org.bukkit.event.player.PlayerEvent event) {
+            try {
+                if (!configManager.getIntegrationSettings().trackJails) {
+                    return;
+                }
+                
+                // Проверяем тип события через рефлексию
+                String eventClassName = event.getClass().getSimpleName();
+                
+                if (eventClassName.equals("CMIPlayerJailEvent")) {
+                    handleCMIJailEvent(event);
+                } else if (eventClassName.equals("CMIPlayerUnJailEvent")) {
+                    handleCMIUnjailEvent(event);
+                }
+                
+            } catch (Exception e) {
+                logger.log(Level.WARNING, "Ошибка при обработке CMI события: " + e.getMessage(), e);
+            }
         }
     }
     

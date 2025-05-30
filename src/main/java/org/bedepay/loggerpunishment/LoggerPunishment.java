@@ -247,7 +247,9 @@ public final class LoggerPunishment extends JavaPlugin {
      */
     private void registerListeners() {
         getLogger().info("Регистрация событий...");
-        getServer().getPluginManager().registerEvents(punishmentListener, this);
+        
+        // PunishmentListener теперь регистрирует свои события самостоятельно
+        // через рефлексию для LiteBans и внутренний класс для CMI
         
         // Регистрация команд
         getCommand("punishmentlogs").setExecutor(commandHandler);

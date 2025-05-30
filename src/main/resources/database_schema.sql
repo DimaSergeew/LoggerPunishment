@@ -152,7 +152,7 @@ END;
 
 -- Таблица статистики (денормализованная таблица для быстрых запросов)
 CREATE TABLE punishment_statistics (
-    id BIGINT PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     target_uuid VARCHAR(36) NOT NULL,
     target_type VARCHAR(10) NOT NULL CHECK (target_type IN ('PLAYER', 'MODERATOR')),
     
@@ -183,7 +183,7 @@ CREATE INDEX idx_statistics_updated ON punishment_statistics(last_updated_at);
 
 -- Таблица очереди Discord действий (для офлайн режима)
 CREATE TABLE discord_queue (
-    id BIGINT PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     action_type VARCHAR(20) NOT NULL CHECK (action_type IN ('SEND_MESSAGE', 'EDIT_MESSAGE', 'DELETE_MESSAGE', 'CREATE_THREAD', 'UPDATE_STATS')),
     target_channel_id BIGINT NOT NULL,
     target_message_id BIGINT,
@@ -215,7 +215,7 @@ CREATE INDEX idx_queue_created ON discord_queue(created_at);
 
 -- Таблица логов плагина
 CREATE TABLE plugin_logs (
-    id BIGINT PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     level VARCHAR(10) NOT NULL CHECK (level IN ('DEBUG', 'INFO', 'WARN', 'ERROR')),
     category VARCHAR(20) NOT NULL,
     message TEXT NOT NULL,

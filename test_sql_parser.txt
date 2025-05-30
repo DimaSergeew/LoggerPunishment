@@ -1,0 +1,33 @@
+-- Тестовый SQL файл для проверки парсинга
+
+-- Простая команда
+CREATE TABLE test1 (id INTEGER);
+
+-- Многострочная команда
+CREATE TABLE IF NOT EXISTS punishment_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type VARCHAR(10) NOT NULL,
+    player_uuid VARCHAR(36) NOT NULL,
+    player_name VARCHAR(16) NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Индекс
+CREATE INDEX IF NOT EXISTS idx_player_uuid ON punishment_logs (player_uuid);
+
+-- Триггер
+CREATE TRIGGER IF NOT EXISTS update_player_stats_insert
+AFTER INSERT ON punishment_logs
+FOR EACH ROW
+BEGIN
+    UPDATE players 
+    SET total_punishments = total_punishments + 1,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE player_uuid = NEW.player_uuid;
+END;
+
+-- Вставка данных
+INSERT INTO plugin_settings (key, value, description) VALUES 
+('last_cleanup_time', '0', 'Время последней очистки старых записей'),
+('stats_last_update', '0', 'Время последнего обновления статистики'); 
